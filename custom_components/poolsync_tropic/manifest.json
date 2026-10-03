@@ -1,0 +1,13 @@
+{
+  "domain": "poolsync_tropic",
+  "name": "AquaCal TropiCal (PoolSync Cloud)",
+  "codeowners": ["@jasoncrew"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/jasoncrew/ha-aquacal-tropical",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jasoncrew/ha-aquacal-tropical/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

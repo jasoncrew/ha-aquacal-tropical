@@ -1,0 +1,81 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "PoolSync account",
+        "description": "Sign in with the same email and password you use in the PoolSync app.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter PoolSync password",
+        "description": "The PoolSync cloud rejected the saved login for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The PoolSync cloud rejected that email or password.",
+      "cannot_connect": "Could not reach the PoolSync cloud. Check the Home Assistant logs.",
+      "no_devices": "Signed in, but no TropiCal heat pump is registered to this account."
+    },
+    "abort": {
+      "already_configured": "This PoolSync account is already set up.",
+      "reauth_successful": "Login updated."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "water_temperature": {
+        "name": "Water temperature"
+      },
+      "air_temperature": {
+        "name": "Air temperature"
+      },
+      "last_report": {
+        "name": "Last report"
+      }
+    },
+    "binary_sensor": {
+      "power": {
+        "name": "Power"
+      },
+      "water_flow": {
+        "name": "Water flow"
+      },
+      "online": {
+        "name": "Online"
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "name": "Thermostat",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "eco": "Eco",
+              "smart": "Smart",
+              "boost": "Boost"
+            }
+          }
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "scan_interval": "Polling interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to ask the PoolSync cloud for new readings (30-3600)."
+        }
+      }
+    }
+  }
+}

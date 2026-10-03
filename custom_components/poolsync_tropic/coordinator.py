@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import TropicApiClient, TropicApiError, TropicAuthError
+from .api import TropicApiClient, TropicApiError, TropicAuthError, TropicInvalidCombination
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,7 +96,26 @@ class TropicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_send(self, changes: dict[str, Any]) -> None:
         """Send a change to the heat pump and reflect it right away."""
-        await self.client.async_set_tropic(self.serial, changes)
+        try:
+            await self.client.async_set_tropic(self.serial, changes)
+        except TropicInvalidCombination:
+            # The cloud validates heatMode and powerMode as a pair; a change
+            # to one alone can be checked against the wrong partner. Resend
+            # with the other mode's current value spelled out.
+            paired = self._with_partner_mode(changes)
+            if paired == changes:
+                raise
+            _LOGGER.debug("Cloud rejected %s as a mode combination, resending as %s", changes, paired)
+            await self.client.async_set_tropic(self.serial, paired)
+            changes = paired
         # The cloud's GET lags the change, so show the new value now;
         # the next scheduled poll confirms it.
         self.async_set_updated_data({**(self.data or {}), **changes})
+
+    def _with_partner_mode(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Add the current heatMode to a powerMode change, or vice versa."""
+        data = self.data or {}
+        for key, partner in (("powerMode", "heatMode"), ("heatMode", "powerMode")):
+            if key in changes and partner not in changes and isinstance(data.get(partner), int):
+                return {partner: data[partner], **changes}
+        return changes

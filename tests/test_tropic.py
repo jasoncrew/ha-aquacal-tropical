@@ -225,6 +225,40 @@ async def test_busy_unit_gives_up(hass: HomeAssistant, aioclient_mock) -> None:
     assert hass.states.get(CLIMATE).attributes["temperature"] == 100
 
 
+INVALID_COMBO = '{"error":"Invalid combination of heat mode and power mode!"}'
+
+
+async def test_invalid_combination_resent_as_pair(hass: HomeAssistant, aioclient_mock) -> None:
+    await setup(hass, aioclient_mock, states={SERIAL: state(powerMode=2)})
+    calls = {"n": 0}
+
+    async def reject_first(method, url, data):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return AiohttpClientMockResponse(method, url, status=500, text=INVALID_COMBO)
+        return AiohttpClientMockResponse(method, url, status=200, text="")
+
+    aioclient_mock.patch(tropic_url(), side_effect=reject_first)
+    await hass.services.async_call(
+        "climate", "set_preset_mode", {"entity_id": CLIMATE, "preset_mode": "boost"}, blocking=True
+    )
+    assert patch_bodies(aioclient_mock) == [{"powerMode": 3}, {"heatMode": 2, "powerMode": 3}]
+    climate = hass.states.get(CLIMATE)
+    assert climate.attributes["preset_mode"] == "boost"
+    assert climate.state == HVACMode.HEAT
+
+
+async def test_invalid_combination_still_rejected(hass: HomeAssistant, aioclient_mock) -> None:
+    await setup(hass, aioclient_mock, states={SERIAL: state(powerMode=2)})
+    aioclient_mock.patch(tropic_url(), status=500, text=INVALID_COMBO)
+    with pytest.raises(HomeAssistantError, match="Invalid combination"):
+        await hass.services.async_call(
+            "climate", "set_preset_mode", {"entity_id": CLIMATE, "preset_mode": "boost"}, blocking=True
+        )
+    assert len(patch_bodies(aioclient_mock)) == 2
+    assert hass.states.get(CLIMATE).attributes["preset_mode"] == "smart"
+
+
 # --- auth & diagnostics ------------------------------------------------------
 
 

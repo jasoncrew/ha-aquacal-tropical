@@ -31,6 +31,10 @@ class TropicCommandTimeout(TropicApiError):
     """The cloud could not relay a command to the heat pump in time."""
 
 
+class TropicInvalidCombination(TropicApiError):
+    """The cloud rejected the heat mode / power mode pair a command would produce."""
+
+
 class TropicApiClient:
     """Talks to the same cloud endpoints the PoolSync app uses."""
 
@@ -100,6 +104,8 @@ class TropicApiClient:
                     text = await resp.text()
                     if resp.status >= 500 and ("timeout" in text or "ReplyStatus" in text):
                         raise TropicCommandTimeout(f"Heat pump did not answer: {text[:200]}")
+                    if "Invalid combination" in text:
+                        raise TropicInvalidCombination(text[:200])
                     raise TropicApiError(f"HTTP {resp.status} on {path}: {text[:200]}")
                 if resp.status == 204:
                     return {}

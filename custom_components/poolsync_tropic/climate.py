@@ -118,7 +118,13 @@ class TropicClimate(TropicEntity, ClimateEntity):
         idx = self.coordinator.mode_index("heat", name) if name else None
         if idx is None:
             raise HomeAssistantError(f"Mode {hvac_mode} is not supported by this heat pump")
-        await self._send({"heatMode": idx})
+        changes: dict[str, Any] = {"heatMode": idx}
+        # Switching on from off: the unit's power mode reads "off" too, and the
+        # cloud rejects a heat mode paired with it, so send a real one along.
+        if name != "off" and self.coordinator.mode_name("power") in (None, "off"):
+            if (power := self.coordinator.power_to_resume()) is not None:
+                changes["powerMode"] = power
+        await self._send(changes)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         idx = self.coordinator.mode_index("power", preset_mode)

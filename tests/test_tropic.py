@@ -259,6 +259,54 @@ async def test_invalid_combination_still_rejected(hass: HomeAssistant, aioclient
     assert hass.states.get(CLIMATE).attributes["preset_mode"] == "smart"
 
 
+def off_state(**overrides) -> dict:
+    """What the cloud reports for a unit that's switched off: power mode off too."""
+    return state(heatMode=0, powerMode=0, isOn=False, **overrides)
+
+
+async def test_turn_on_from_off_sends_power_mode(hass: HomeAssistant, aioclient_mock) -> None:
+    # Off since before Home Assistant started: no power mode to resume, so Smart.
+    await setup(hass, aioclient_mock, states={SERIAL: off_state()})
+    aioclient_mock.patch(tropic_url(), status=200, text="")
+    await hass.services.async_call(
+        "climate", "set_hvac_mode", {"entity_id": CLIMATE, "hvac_mode": "heat"}, blocking=True
+    )
+    assert patch_bodies(aioclient_mock) == [{"heatMode": 2, "powerMode": 2}]
+    climate = hass.states.get(CLIMATE)
+    assert climate.state == HVACMode.HEAT
+    assert climate.attributes["preset_mode"] == "smart"
+
+
+async def test_turn_on_resumes_last_power_mode(hass: HomeAssistant, aioclient_mock) -> None:
+    entry = await setup(hass, aioclient_mock)  # heating on Boost
+    aioclient_mock.patch(tropic_url(), status=200, text="")
+    await hass.services.async_call("climate", "turn_off", {"entity_id": CLIMATE}, blocking=True)
+    assert patch_bodies(aioclient_mock) == [{"heatMode": 0}]
+
+    # The next poll shows the unit off, with power mode off as well.
+    aioclient_mock.clear_requests()
+    mock_cloud(aioclient_mock, states={SERIAL: off_state()})
+    aioclient_mock.patch(tropic_url(), status=200, text="")
+    await next(iter(entry.runtime_data.values())).async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(CLIMATE).state == HVACMode.OFF
+    assert hass.states.get(CLIMATE).attributes["preset_mode"] is None
+
+    await hass.services.async_call("climate", "turn_on", {"entity_id": CLIMATE}, blocking=True)
+    assert patch_bodies(aioclient_mock) == [{"heatMode": 2, "powerMode": 3}]
+    climate = hass.states.get(CLIMATE)
+    assert climate.state == HVACMode.HEAT
+    assert climate.attributes["preset_mode"] == "boost"
+
+
+async def test_pairing_never_uses_power_off_for_a_running_mode(hass: HomeAssistant, aioclient_mock) -> None:
+    entry = await setup(hass, aioclient_mock, states={SERIAL: off_state()})
+    coordinator = next(iter(entry.runtime_data.values()))
+    assert coordinator._with_partner_mode({"heatMode": 3}) == {"powerMode": 2, "heatMode": 3}
+    # Switching off may pair with power off.
+    assert coordinator._with_partner_mode({"heatMode": 0}) == {"powerMode": 0, "heatMode": 0}
+
+
 # --- auth & diagnostics ------------------------------------------------------
 
 

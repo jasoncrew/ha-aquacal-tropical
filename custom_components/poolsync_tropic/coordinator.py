@@ -43,14 +43,18 @@ class TropicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.serial = serial
         self.device_name = device_name
+        # Last power mode in use while the unit was on, to switch back on with.
+        self._last_power: int | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            return await self.client.async_get_tropic(self.serial)
+            data = await self.client.async_get_tropic(self.serial)
         except TropicAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except TropicApiError as err:
             raise UpdateFailed(str(err)) from err
+        self._remember_power(data)
+        return data
 
     # --- helpers shared by entities -------------------------------------
 
@@ -94,6 +98,29 @@ class TropicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         names = self.mode_names(kind)
         return names.index(name) if name in names else None
 
+    def _remember_power(self, data: dict[str, Any]) -> None:
+        names = [str(n).lower() for n in data.get("availablePowerModes") or []]
+        idx = data.get("powerMode")
+        if isinstance(idx, int) and 0 <= idx < len(names) and names[idx] != "off":
+            self._last_power = idx
+
+    def power_to_resume(self) -> int | None:
+        """Power mode to switch the unit on with.
+
+        While the unit is off the cloud reports power mode "off" too, and it
+        rejects any heat mode paired with that. Use the current power mode if
+        it isn't off, else the last one used, else Smart.
+        """
+        names = self.mode_names("power")
+        idx = (self.data or {}).get("powerMode")
+        if isinstance(idx, int) and 0 <= idx < len(names) and names[idx] != "off":
+            return idx
+        if self._last_power is not None and self._last_power < len(names):
+            return self._last_power
+        if "smart" in names:
+            return names.index("smart")
+        return next((i for i, n in enumerate(names) if n != "off"), None)
+
     async def async_send(self, changes: dict[str, Any]) -> None:
         """Send a change to the heat pump and reflect it right away."""
         try:
@@ -110,11 +137,26 @@ class TropicCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             changes = paired
         # The cloud's GET lags the change, so show the new value now;
         # the next scheduled poll confirms it.
-        self.async_set_updated_data({**(self.data or {}), **changes})
+        merged = {**(self.data or {}), **changes}
+        self._remember_power(merged)
+        self.async_set_updated_data(merged)
 
     def _with_partner_mode(self, changes: dict[str, Any]) -> dict[str, Any]:
-        """Add the current heatMode to a powerMode change, or vice versa."""
+        """Add the current heatMode to a powerMode change, or vice versa.
+
+        A heat mode other than off is never paired with power "off" (what the
+        cloud reports while the unit is off): it gets the power mode to switch
+        back on with instead.
+        """
         data = self.data or {}
+        if "heatMode" in changes and "powerMode" not in changes:
+            heat_names = self.mode_names("heat")
+            heat = changes["heatMode"]
+            turning_on = not (isinstance(heat, int) and 0 <= heat < len(heat_names) and heat_names[heat] == "off")
+            if turning_on and self.mode_name("power") in (None, "off"):
+                power = self.power_to_resume()
+                if power is not None:
+                    return {"powerMode": power, **changes}
         for key, partner in (("powerMode", "heatMode"), ("heatMode", "powerMode")):
             if key in changes and partner not in changes and isinstance(data.get(partner), int):
                 return {partner: data[partner], **changes}

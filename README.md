@@ -10,6 +10,18 @@ app, signing in with your PoolSync app account.
 > Not affiliated with or endorsed by AquaCal AutoPilot, Inc. The cloud API is
 > undocumented and could change without notice.
 
+## Related integrations
+- **[AP_PoolSync](https://github.com/ccpk1/AP_PoolSync)** (PoolSync Custom) by
+  @ccpk1: **local control** of AquaCal/AutoPilot PoolSync hardware, including
+  heat pumps on a PoolSync module that answers on your network, ChlorSync and
+  ChemSync. If your device can be reached locally, use that: it's faster, needs
+  no cloud account and covers far more hardware. This integration is for the
+  TropiCal units with built-in Wi-Fi that have no local API.
+- **[poolsync_chlorsync](https://github.com/CLARENNE-Q/poolsync_chlorsync)** by
+  @CLARENNE-Q: ChlorSync chlorinators over the PoolSync cloud.
+
+Both can be installed alongside this one (different domains).
+
 ## Requirements
 - A TropiCal heat pump already set up in the **PoolSync app** on your account
 - Home Assistant 2024.11 or newer (developed and tested on 2026.9–2026.10)
